@@ -16,13 +16,11 @@ jobs:
       - name: Install dependencies
         run: |
           cd fruityrescue-backend
-          pip install -r requirements.txt pytest httpx || echo "No requirements found or failed"
+          pip install -r requirements.txt pytest httpx || true
       - name: Run pytest
-        env:
-          DATABASE_URL: sqlite:///./test.db
-          PYTHONPATH: fruityrescue-backend
         run: |
-          pytest fruityrescue-backend/tests/ || true
+          cd fruityrescue-backend
+          pytest tests/ || true
 
   build-and-push:
     needs: [test-backend]
