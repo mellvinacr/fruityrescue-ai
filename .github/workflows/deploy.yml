@@ -15,11 +15,12 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          # Jika requirements.txt ada di root, langsung install
+          cd fruityrescue-backend
           pip install -r requirements.txt pytest httpx || pip install pytest httpx || true
       - name: Run pytest
         run: |
-          pytest tests/ || pytest || true
+          cd fruityrescue-backend
+          pytest tests/ || true
 
   build-and-push:
     needs: [test-backend]
@@ -42,8 +43,8 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          # Build langsung menggunakan titik (.) karena Dockerfile berada di root repositori GitHub kamu saat ini
-          docker build -t $ECR_REGISTRY/fruityrescue-backend:latest .
+          # Melakukan build dengan mengarahkan langsung ke dalam folder aplikasi backend kamu
+          docker build -t $ECR_REGISTRY/fruityrescue-backend:latest -f ./fruityrescue-backend/Dockerfile ./fruityrescue-backend
           docker push $ECR_REGISTRY/fruityrescue-backend:latest
 
   deploy-backend:
