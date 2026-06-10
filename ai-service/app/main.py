@@ -13,10 +13,10 @@ import traceback
 async def lifespan(app: FastAPI):
     print("🚀 Starting AI service — loading model...")
     load_model()
-    if inference_module.classifier is not None:
-        print("✅ Model loaded successfully")
+    if inference_module.type_classifier is not None and inference_module.freshness_classifier is not None:
+        print("✅ Dual Models loaded successfully")
     else:
-        print("🚨 WARNING: Model failed to load! /detect will return UNKNOWN")
+        print("🚨 WARNING: Models failed to load! /detect will return UNKNOWN")
     yield
     print("🛑 AI service shutting down")
 
@@ -127,5 +127,5 @@ def health_check():
     return {
         "status": "ok",
         "service": "ai-service",
-        "model_loaded": inference_module.classifier is not None,
+        "model_loaded": inference_module.type_classifier is not None and inference_module.freshness_classifier is not None,
     }
