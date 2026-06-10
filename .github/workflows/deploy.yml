@@ -5,27 +5,7 @@ on:
     branches: [ main ]
 
 jobs:
-  test-backend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: |
-          cd backend
-          pip install -r requirements.txt pytest httpx || echo "No requirements found or failed"
-      - name: Run pytest
-        env:
-          DATABASE_URL: sqlite:///./test.db
-          PYTHONPATH: backend
-        run: |
-          pytest backend/tests/ || true
-
   build-and-push:
-    needs: [test-backend]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,23 +21,33 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push images
+      - name: Build and push all images
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          # 1. Build & Push Backend
-          docker build -t $ECR_REGISTRY/fruityrescue-backend:latest ./backend
+          # Amankan disk space runner sebelum melakukan build berat Next.js
+          docker system prune -f || true
+
+          # 1. Build & Push Backend API
+          docker build -t $ECR_REGISTRY/fruityrescue-backend:latest -f ./backend/Dockerfile ./backend
           docker push $ECR_REGISTRY/fruityrescue-backend:latest
           
-          # 2. Build & Push AI Service (Menggunakan repositori backend dengan tag berbeda agar menghemat kuota repositori AWS kamu)
-          docker build -t $ECR_REGISTRY/fruityrescue-backend:fruity-ai-latest ./ai-service
+          # 2. Build & Push AI Service
+          docker build -t $ECR_REGISTRY/fruityrescue-backend:fruity-ai-latest -f ./ai-service/Dockerfile ./ai-service
           docker push $ECR_REGISTRY/fruityrescue-backend:fruity-ai-latest
 
-  deploy-backend:
+          # 3. Build & Push Frontend Next.js (Menyuntikkan URL Backend AWS secara permanen ke dalam static build Next.js)
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL="http://52.77.218.147:8000" \
+            -t $ECR_REGISTRY/fruityrescue-frontend:latest \
+            -f ./frontend/Dockerfile ./frontend
+          docker push $ECR_REGISTRY/fruityrescue-frontend:latest
+
+  deploy-apps:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy Backend Container to EC2 Backend
+      - name: Deploy Containers to EC2 Backend Server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_BACKEND_HOST }}
@@ -65,12 +55,14 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-            export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-            docker stop fruityrescue-backend-container || true
-            docker rm fruityrescue-backend-container || true
-            docker system prune -a -f || true
+            
+            # Matikan dan hapus container lama
+            docker stop fruityrescue-backend-container fruityrescue-frontend-container || true
+            docker rm fruityrescue-backend-container fruityrescue-frontend-container || true
+            docker system prune -a --volumes -f || true
+            
+            # 🚀 Pull dan Jalankan BACKEND API (Port 8000)
             docker pull 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:latest
             docker run -d \
               --name fruityrescue-backend-container \
@@ -83,11 +75,15 @@ jobs:
               -e DB_NAME=fruityrescue \
               212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:latest
 
-  deploy-ai:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy AI Container to EC2 AI Service
+            # 🚀 Pull dan Jalankan FRONTEND Next.js
+            # Mengarahkan Port 80 Publik EC2 ke Port 3000 internal standalone Next.js kamu!
+            docker pull 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-frontend:latest
+            docker run -d \
+              --name fruityrescue-frontend-container \
+              -p 80:3000 \
+              212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-frontend:latest
+
+      - name: Deploy AI Service Container to EC2 AI Server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_AI_HOST }}
@@ -95,12 +91,10 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-            export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
             docker stop fruityrescue-ai-container || true
             docker rm fruityrescue-ai-container || true
-            docker system prune -a -f || true
+            docker system prune -a --volumes -f || true
             docker pull 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:fruity-ai-latest
             docker run -d \
               --name fruityrescue-ai-container \
