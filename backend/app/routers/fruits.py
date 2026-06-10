@@ -4,7 +4,7 @@ from sqlalchemy import func
 from typing import List, Optional
 from .. import models, schemas
 from ..database import get_db
-from ..services.gcs_service import upload_photo
+from ..services.storage_service import upload_photo
 from ..services.ai_client import detect_fruit
 from ..auth import get_current_user, get_optional_user
 
