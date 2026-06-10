@@ -45,10 +45,42 @@ async def detect(file: UploadFile = File(...)):
         status = hf_result["status"]
         confidence = hf_result["confidence"]
         fruit_type = hf_result["fruit_type"]
+        is_fruit = hf_result.get("is_fruit", True)
 
-        # Layer 2: Gemini Vision analysis
-        gemini_analysis = analyze_fruit_image(image_bytes, status, fruit_type)
-        status = gemini_analysis.get("status", status).upper()
+        if not is_fruit:
+            return {
+                "status": "UNKNOWN",
+                "confidence": confidence,
+                "fruit_type": "unknown",
+                "fruit_name": "Bukan Buah/Sayur",
+                "visual_condition": "Objek tidak dikenali sebagai buah atau sayuran",
+                "freshness_score": 0,
+                "estimated_days_remaining": 0,
+                "quick_recommendation": "Silakan unggah foto buah atau sayur yang jelas",
+                "storage_tips": "-",
+                "recommendation": "compost",
+                "reason": "Sistem menolak objek non-buah"
+            }
+
+        # Layer 2: Gemini Vision analysis (HANYA JIKA DIBUTUHKAN)
+        if status == "NEEDS_GEMINI" or status == "UNKNOWN":
+            print(f"🤖 Menjalankan Gemini Vision karena HF status adalah {status}...")
+            gemini_analysis = analyze_fruit_image(image_bytes, "UNKNOWN", fruit_type)
+            status = gemini_analysis.get("status", "ROTTEN").upper()
+        else:
+            # Hemat Quota: Gunakan template jika HF sudah yakin statusnya FRESH/ROTTEN
+            print(f"⚡ Bypass Gemini Vision, HF sudah yakin statusnya: {status}")
+            from .gemini_vision import translate_fruit_type
+            score = int(confidence * 100)
+            gemini_analysis = {
+                "status": status,
+                "fruit_name": translate_fruit_type(fruit_type),
+                "visual_condition": f"Kondisi fisik terlihat {status.lower()} dari gambar",
+                "freshness_score": score if status == "FRESH" else max(0, 40 - int(confidence * 40)),
+                "estimated_days_remaining": 3 if status == "FRESH" else 0,
+                "quick_recommendation": "Segera konsumsi" if status == "FRESH" else "Pisahkan dari buah lain yang segar",
+                "storage_tips": "Simpan di kulkas atau tempat sejuk" if status == "FRESH" else "Segera daur ulang untuk mencegah penyebaran jamur"
+            }
 
         # Layer 3: Allocation recommendation
         if status == "ROTTEN":

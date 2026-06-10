@@ -16,7 +16,7 @@ ENV HF_HOME=/app/hf_cache
 RUN python -c "\
 from transformers import pipeline; \
 print('Downloading model...'); \
-p = pipeline('image-classification', model='jazzmacedo/fruits-and-vegetables-detector-36'); \
+p = pipeline('image-classification', model='dima806/fruit_vegetable_image_detection'); \
 print('Model cached successfully')"
 
 # Copy application code
