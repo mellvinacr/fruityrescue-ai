@@ -73,6 +73,10 @@ jobs:
               -e DB_USER=postgres \
               -e DB_PASSWORD=fruitypassword123 \
               -e DB_NAME=fruityrescue \
+              -e R2_ACCOUNT_ID=${{ secrets.R2_ACCOUNT_ID }} \
+              -e R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }} \
+              -e R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }} \
+              -e R2_BUCKET_NAME=${{ secrets.R2_BUCKET_NAME }} \
               212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:latest
 
             # 🚀 Pull dan Jalankan FRONTEND Next.js
