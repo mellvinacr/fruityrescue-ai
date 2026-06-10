@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: ${ECR_REGISTRY}/fruityrescue-frontend:${IMAGE_TAG:-latest}
+    ports:
+      - "3000:3000"
+    networks:
+      - fruityrescue-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    image: ${ECR_REGISTRY}/fruityrescue-backend:${IMAGE_TAG:-latest}
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/fruityrescue
+      - REDIS_URL=redis://redis:6379/0
+      - AI_SERVICE_URL=http://ai-service:8001
+      - SECRET_KEY=${SECRET_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    networks:
+      - fruityrescue-network
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  ai-service:
+    image: ${ECR_REGISTRY}/fruityrescue-ai-service:${IMAGE_TAG:-latest}
+    ports:
+      - "8001:8001"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_HOME=/app/hf_cache
+    networks:
+      - fruityrescue-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=fruityrescue
+    ports:
+      - "5432:5432"
+    networks:
+      - fruityrescue-network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - fruityrescue-network
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+networks:
+  fruityrescue-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
