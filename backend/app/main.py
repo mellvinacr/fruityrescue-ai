@@ -34,7 +34,7 @@ app.include_router(dashboard.router)
 app.include_router(recipients.router)
 
 # ── Gemini Chat Endpoint ──
-GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
     chat_model = genai.GenerativeModel("gemini-2.5-flash")

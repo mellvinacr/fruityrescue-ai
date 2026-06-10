@@ -79,6 +79,7 @@ jobs:
               -e R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }} \
               -e R2_BUCKET_NAME=${{ secrets.R2_BUCKET_NAME }} \
               -e GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
+              -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
               212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:latest
 
             # 🚀 Pull dan Jalankan FRONTEND Next.js
@@ -106,4 +107,5 @@ jobs:
               --name fruityrescue-ai-container \
               -p 7860:7860 \
               -e GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
+              -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
               212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:fruity-ai-latest

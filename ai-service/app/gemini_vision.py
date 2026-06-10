@@ -4,7 +4,7 @@ import os
 from PIL import Image
 import io
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY", ""))
+genai.configure(api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "")
 # Use gemini-2.5-flash since gemini-1.5-flash is not supported/found under this API key
 vision_model = genai.GenerativeModel("gemini-2.5-flash")
 

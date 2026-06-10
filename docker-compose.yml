@@ -28,6 +28,11 @@ services:
       - AI_SERVICE_URL=http://ai-service:8001
       - SECRET_KEY=${SECRET_KEY:-fruityrescue-secret-2026}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DB_HOST=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=fruityrescue
+      - DB_PORT=5432
     networks:
       - fruityrescue-network
     depends_on:
