@@ -4,51 +4,47 @@ import torch
 from transformers import pipeline
 from PIL import Image
 
-classifier = None
+type_classifier = None
+freshness_classifier = None
 
-# Confidence threshold: if the top prediction score is below this,
-# the image is likely NOT a fruit/vegetable and should be rejected early.
-# This prevents wasting Gemini API quota on non-fruit images.
-CONFIDENCE_THRESHOLD = float(os.getenv("HF_CONFIDENCE_THRESHOLD", "0.40"))
+# Confidence threshold to reject non-fruit images
+CONFIDENCE_THRESHOLD = float(os.getenv("HF_CONFIDENCE_THRESHOLD", "0.35"))
 
 def load_model():
-    global classifier
+    global type_classifier, freshness_classifier
     hf_token = os.getenv("HF_TOKEN")
     
-    # Model with fresh/rotten labels (e.g. "freshapples", "rottenapples", etc.)
-    # This model outputs labels like "freshapples", "rottenapples", "freshbanana",
-    # "rottenbanana", etc. — enabling the inference code to determine BOTH the
-    # fruit type AND its freshness status from a single HuggingFace call.
-    primary_models = [
-        "dima806/fruit_vegetable_image_detection",   # ViT-based, 36 classes including fresh/rotten
-        "jazzmacedo/fruits-and-vegetables-detector-36",  # Fallback: ResNet-50, type-only
-    ]
-    
-    for model_name in primary_models:
-        try:
-            print(f"Loading model: {model_name}...")
-            classifier = pipeline(
-                "image-classification",
-                model=model_name,
-                token=hf_token,
-                device=-1,  # Force CPU explicitly
-            )
-            # Quick check: see what labels this model supports
-            labels = []
-            if hasattr(classifier.model, 'config') and hasattr(classifier.model.config, 'id2label'):
-                labels = list(classifier.model.config.id2label.values())
-                print(f"  Model labels ({len(labels)}): {labels[:10]}{'...' if len(labels) > 10 else ''}")
-                has_freshness = any('fresh' in l.lower() or 'rotten' in l.lower() for l in labels)
-                print(f"  Has fresh/rotten labels: {has_freshness}")
-            print(f"✅ Model loaded successfully: {model_name}")
-            return
-        except Exception as e:
-            print(f"❌ Failed to load {model_name}: {e}")
-    
-    print("🚨 CRITICAL: No model could be loaded! /detect will return UNKNOWN.")
+    # 1. Model for Fruit Type (ResNet-50, 36 classes)
+    try:
+        print("Loading fruit type model: jazzmacedo/fruits-and-vegetables-detector-36...")
+        type_classifier = pipeline(
+            "image-classification",
+            model="jazzmacedo/fruits-and-vegetables-detector-36",
+            token=hf_token,
+            device=-1,
+        )
+        print("✅ Fruit type model loaded successfully")
+    except Exception as e:
+        print(f"❌ Failed to load fruit type model: {e}")
+
+    # 2. Model for Freshness (ViT, binary: fresh vs rotten)
+    try:
+        print("Loading freshness model: melispsp/fresh_rotten...")
+        freshness_classifier = pipeline(
+            "image-classification",
+            model="melispsp/fresh_rotten",
+            token=hf_token,
+            device=-1,
+        )
+        print("✅ Freshness model loaded successfully")
+    except Exception as e:
+        print(f"❌ Failed to load freshness model: {e}")
+
+    if type_classifier is None and freshness_classifier is None:
+        print("🚨 CRITICAL: No models could be loaded! /detect will return UNKNOWN.")
 
 def detect_freshness(image_bytes: bytes) -> dict:
-    if classifier is None:
+    if type_classifier is None or freshness_classifier is None:
         return {
             "status": "UNKNOWN",
             "confidence": 0.0,
@@ -59,55 +55,47 @@ def detect_freshness(image_bytes: bytes) -> dict:
     
     try:
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        results = classifier(image, top_k=5)  # Get top 5 predictions
         
-        top_result = results[0]
-        label = top_result['label'].lower()
-        score = top_result['score']
+        # 1. Detect fruit type
+        type_results = type_classifier(image, top_k=3)
+        top_type = type_results[0]
+        fruit_type = top_type['label'].lower().replace("fresh", "").replace("rotten", "").strip().strip("_- ")
+        type_score = top_type['score']
         
-        # Build a summary of all top predictions for logging
-        all_scores = [{"label": r["label"], "score": round(r["score"], 4)} for r in results]
+        all_scores = [{"label": r["label"], "score": round(r["score"], 4)} for r in type_results]
         
-        # ── Confidence gate: reject non-fruit images ──
-        # If the model is not confident about ANY classification, this is likely
-        # not a fruit/vegetable image at all.
-        if score < CONFIDENCE_THRESHOLD:
-            print(f"⚠️ Low confidence ({score:.2%}) for top label '{label}' — likely not a fruit")
+        # Check if it's actually a fruit
+        if type_score < CONFIDENCE_THRESHOLD:
+            print(f"⚠️ Low confidence ({type_score:.2%}) for '{fruit_type}' — likely not a fruit")
             return {
                 "status": "UNKNOWN",
-                "confidence": float(score),
+                "confidence": float(type_score),
                 "fruit_type": "unknown",
                 "is_fruit": False,
                 "all_scores": all_scores,
             }
 
-        # ── Parse fresh/rotten from label ──
-        # Models may use formats like:
-        #   "freshapples", "rottenapples" (no separator)
-        #   "fresh apple", "rotten apple" (space separator)
-        #   "fresh_apple", "rotten_apple" (underscore)
-        label_lower = label.lower().replace("_", " ").replace("-", " ")
+        # 2. Detect freshness
+        freshness_results = freshness_classifier(image, top_k=2)
+        top_freshness = freshness_results[0]
+        status_label = top_freshness['label'].lower()
+        freshness_score = top_freshness['score']
         
-        if "rotten" in label_lower:
+        # Average the confidence
+        final_confidence = (type_score + freshness_score) / 2
+        
+        if "rotten" in status_label:
             status = "ROTTEN"
-        elif "fresh" in label_lower:
+        elif "fresh" in status_label:
             status = "FRESH"
         else:
-            # Model doesn't have fresh/rotten in labels (type-only model)
-            # Mark as requiring Gemini analysis
             status = "NEEDS_GEMINI"
-        
-        # Extract fruit type by removing fresh/rotten prefixes
-        fruit_type = label_lower
-        for prefix in ["fresh", "rotten"]:
-            fruit_type = fruit_type.replace(prefix, "")
-        fruit_type = fruit_type.strip().strip("_- ")
-        if not fruit_type:
-            fruit_type = "unknown"
+            
+        print(f"🍎 Result: {status} {fruit_type} (Type Conf: {type_score:.2%}, Fresh Conf: {freshness_score:.2%})")
             
         return {
             "status": status,
-            "confidence": float(score),
+            "confidence": float(final_confidence),
             "fruit_type": fruit_type,
             "is_fruit": True,
             "all_scores": all_scores,

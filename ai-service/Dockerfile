@@ -15,9 +15,11 @@ RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
 ENV HF_HOME=/app/hf_cache
 RUN python -c "\
 from transformers import pipeline; \
-print('Downloading model...'); \
-p = pipeline('image-classification', model='dima806/fruit_vegetable_image_detection'); \
-print('Model cached successfully')"
+print('Downloading type model...'); \
+pipeline('image-classification', model='jazzmacedo/fruits-and-vegetables-detector-36'); \
+print('Downloading freshness model...'); \
+pipeline('image-classification', model='melispsp/fresh_rotten'); \
+print('Models cached successfully')"
 
 # Copy application code
 COPY . .
