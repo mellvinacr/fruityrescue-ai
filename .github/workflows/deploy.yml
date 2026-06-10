@@ -15,14 +15,14 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          cd fruityrescue-backend
+          cd backend
           pip install -r requirements.txt pytest httpx || echo "No requirements found or failed"
       - name: Run pytest
         env:
           DATABASE_URL: sqlite:///./test.db
-          PYTHONPATH: fruityrescue-backend
+          PYTHONPATH: backend
         run: |
-          pytest fruityrescue-backend/tests/ || true
+          pytest backend/tests/ || true
 
   build-and-push:
     needs: [test-backend]
@@ -46,11 +46,11 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           # 1. Build & Push Backend
-          docker build -t $ECR_REGISTRY/fruityrescue-backend:latest ./fruityrescue-backend
+          docker build -t $ECR_REGISTRY/fruityrescue-backend:latest ./backend
           docker push $ECR_REGISTRY/fruityrescue-backend:latest
           
           # 2. Build & Push AI Service (Menggunakan repositori backend dengan tag berbeda agar menghemat kuota repositori AWS kamu)
-          docker build -t $ECR_REGISTRY/fruityrescue-backend:fruity-ai-latest ./fruityrescue-ai
+          docker build -t $ECR_REGISTRY/fruityrescue-backend:fruity-ai-latest ./ai-service
           docker push $ECR_REGISTRY/fruityrescue-backend:fruity-ai-latest
 
   deploy-backend:
