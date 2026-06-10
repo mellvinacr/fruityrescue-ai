@@ -15,6 +15,35 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="FruityRescue AI Backend API")
 
+@app.on_event("startup")
+def seed_admin_user():
+    from .database import SessionLocal
+    from . import models
+    db = SessionLocal()
+    try:
+        # Check if admin exists
+        admin = db.query(models.User).filter(models.User.email == "admin@fruityrescue.com").first()
+        if not admin:
+            # Seed default admin and other sample data
+            print("Seeding default admin user...")
+            from passlib.context import CryptContext
+            pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            hashed_password = pwd_context.hash("admin123")
+            
+            new_admin = models.User(
+                name="Admin FruityRescue",
+                email="admin@fruityrescue.com",
+                password_hash=hashed_password,
+                role="admin"
+            )
+            db.add(new_admin)
+            db.commit()
+            print("Admin user seeded successfully!")
+    except Exception as e:
+        print("Failed to seed database:", e)
+    finally:
+        db.close()
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.add_middleware(
