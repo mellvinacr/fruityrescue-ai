@@ -50,21 +50,30 @@ jobs:
     steps:
       - name: Deploy Containers to EC2 Backend Server
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
         with:
           host: ${{ secrets.EC2_BACKEND_HOST }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
+          envs: AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_REGION
           script: |
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+            export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+            export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+            export AWS_DEFAULT_REGION=$AWS_REGION
             
-            # Matikan dan hapus container lama
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin 212712010930.dkr.ecr.$AWS_REGION.amazonaws.com
+            
+            # Matikan dan hapus container lama dengan paksa (-f)
             docker stop fruityrescue-backend-container fruityrescue-frontend-container || true
-            docker rm fruityrescue-backend-container fruityrescue-frontend-container || true
+            docker rm -f fruityrescue-backend-container fruityrescue-frontend-container || true
             docker system prune -a --volumes -f || true
             
             # 🚀 Pull dan Jalankan BACKEND API (Port 8000)
-            docker pull 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:latest
+            docker pull 212712010930.dkr.ecr.$AWS_REGION.amazonaws.com/fruityrescue-backend:latest
             docker run -d \
               --name fruityrescue-backend-container \
               -p 8000:8000 \
@@ -80,32 +89,45 @@ jobs:
               -e R2_BUCKET_NAME=${{ secrets.R2_BUCKET_NAME }} \
               -e GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
               -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
-              212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:latest
+              212712010930.dkr.ecr.$AWS_REGION.amazonaws.com/fruityrescue-backend:latest
 
             # 🚀 Pull dan Jalankan FRONTEND Next.js
-            # Mengarahkan Port 80 Publik EC2 ke Port 3000 internal standalone Next.js kamu!
-            docker pull 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-frontend:latest
+            docker pull 212712010930.dkr.ecr.$AWS_REGION.amazonaws.com/fruityrescue-frontend:latest
             docker run -d \
               --name fruityrescue-frontend-container \
               -p 80:3000 \
-              212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-frontend:latest
+              212712010930.dkr.ecr.$AWS_REGION.amazonaws.com/fruityrescue-frontend:latest
 
       - name: Deploy AI Service Container to EC2 AI Server
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
         with:
           host: ${{ secrets.EC2_AI_HOST }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
+          envs: AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_REGION
           script: |
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+            export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+            export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+            export AWS_DEFAULT_REGION=$AWS_REGION
+            
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin 212712010930.dkr.ecr.$AWS_REGION.amazonaws.com
+            
+            # Matikan dan hapus container lama dengan paksa (-f)
             docker stop fruityrescue-ai-container || true
-            docker rm fruityrescue-ai-container || true
+            docker rm -f fruityrescue-ai-container || true
             docker system prune -a --volumes -f || true
-            docker pull 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:fruity-ai-latest
+            
+            docker pull 212712010930.dkr.ecr.$AWS_REGION.amazonaws.com/fruityrescue-backend:fruity-ai-latest
+            
+            # Note: Map port 7860 (EC2 Host) to 8001 (Container Uvicorn port)
             docker run -d \
               --name fruityrescue-ai-container \
-              -p 7860:7860 \
+              -p 7860:8001 \
               -e GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
               -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
-              212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:fruity-ai-latest
+              212712010930.dkr.ecr.$AWS_REGION.amazonaws.com/fruityrescue-backend:fruity-ai-latest
