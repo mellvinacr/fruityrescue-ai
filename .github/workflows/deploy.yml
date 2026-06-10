@@ -70,6 +70,7 @@ jobs:
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
             docker stop fruityrescue-backend-container || true
             docker rm fruityrescue-backend-container || true
+            docker system prune -a -f || true
             docker pull 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:latest
             docker run -d \
               --name fruityrescue-backend-container \
@@ -99,6 +100,7 @@ jobs:
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
             docker stop fruityrescue-ai-container || true
             docker rm fruityrescue-ai-container || true
+            docker system prune -a -f || true
             docker pull 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:fruity-ai-latest
             docker run -d \
               --name fruityrescue-ai-container \
