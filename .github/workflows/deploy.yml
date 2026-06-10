@@ -15,15 +15,14 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          cd backend
+          cd fruityrescue-backend
           pip install -r requirements.txt pytest httpx || echo "No requirements found or failed"
       - name: Run pytest
         env:
           DATABASE_URL: sqlite:///./test.db
-          PYTHONPATH: backend
+          PYTHONPATH: fruityrescue-backend
         run: |
-          # Perintah ini akan tetap pass (|| true) jika kamu belum menulis file testing di folder tests/
-          pytest backend/tests/ || true
+          pytest fruityrescue-backend/tests/ || true
 
   build-and-push:
     needs: [test-backend]
@@ -45,14 +44,13 @@ jobs:
       - name: Build and push images
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: latest
         run: |
           # 1. Build & Push Backend
-          docker build -t $ECR_REGISTRY/fruityrescue-backend:$IMAGE_TAG ./backend
-          docker push $ECR_REGISTRY/fruityrescue-backend:$IMAGE_TAG
+          docker build -t $ECR_REGISTRY/fruityrescue-backend:latest ./fruityrescue-backend
+          docker push $ECR_REGISTRY/fruityrescue-backend:latest
           
-          # 2. Build & Push AI Service
-          docker build -t $ECR_REGISTRY/fruityrescue-backend:fruity-ai-latest ./ai-service
+          # 2. Build & Push AI Service (Menggunakan repositori backend dengan tag berbeda agar menghemat kuota repositori AWS kamu)
+          docker build -t $ECR_REGISTRY/fruityrescue-backend:fruity-ai-latest ./fruityrescue-ai
           docker push $ECR_REGISTRY/fruityrescue-backend:fruity-ai-latest
 
   deploy-backend:
@@ -67,14 +65,9 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            # Login ke ECR dari dalam EC2 Backend
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-            
-            # Bersihkan container backend lama jika ada
             docker stop fruityrescue-backend-container || true
             docker rm fruityrescue-backend-container || true
-            
-            # Tarik dan jalankan image backend terbaru
             docker pull 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:latest
             docker run -d \
               --name fruityrescue-backend-container \
@@ -94,20 +87,14 @@ jobs:
       - name: Deploy AI Container to EC2 AI Service
         uses: appleboy/ssh-action@v1.0.3
         with:
-          # Pastikan kamu mendaftarkan IP Public EC2 AI di GitHub secrets dengan nama EC2_AI_HOST
           host: ${{ secrets.EC2_AI_HOST }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            # Login ke ECR dari dalam EC2 AI
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-            
-            # Bersihkan container AI lama jika ada
             docker stop fruityrescue-ai-container || true
             docker rm fruityrescue-ai-container || true
-            
-            # Tarik dan jalankan image AI terbaru
             docker pull 212712010930.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/fruityrescue-backend:fruity-ai-latest
             docker run -d \
               --name fruityrescue-ai-container \
