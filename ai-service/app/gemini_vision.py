@@ -1,12 +1,17 @@
 import google.generativeai as genai
 import json
 import os
+import time
 from PIL import Image
 import io
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "")
-# Use gemini-2.5-flash since gemini-1.5-flash is not supported/found under this API key
-vision_model = genai.GenerativeModel("gemini-2.5-flash")
+
+# Model priority order (by free-tier quota):
+# - gemini-2.0-flash-lite: 30 RPD, lightest/fastest
+# - gemini-2.0-flash:      1500 RPD but sometimes throttled  
+# - gemini-2.5-flash:      20 RPD, most capable but lowest quota
+VISION_MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"]
 
 TRANSLATION_MAP = {
     'apple': 'Apel',
@@ -53,6 +58,29 @@ def translate_fruit_type(fruit_type: str) -> str:
     key = fruit_type.lower().strip()
     return TRANSLATION_MAP.get(key, fruit_type.capitalize())
 
+
+def _call_gemini_with_retry(model_name: str, content: list, max_retries: int = 3) -> str:
+    """Call Gemini API with exponential backoff retry on rate-limit (429) errors."""
+    model = genai.GenerativeModel(model_name)
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(content)
+            return response.text.strip()
+        except Exception as e:
+            last_error = e
+            error_str = str(e)
+            # Only retry on rate-limit / quota errors
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
+                wait_time = (2 ** attempt) * 2  # 2s, 4s, 8s
+                print(f"⏳ Gemini rate-limited on {model_name} (attempt {attempt+1}/{max_retries}), retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                # Non-retryable error, break immediately
+                raise
+    raise last_error
+
+
 def analyze_fruit_image(image_bytes: bytes, hf_status: str, fruit_type: str = "unknown") -> dict:
     try:
         image = Image.open(io.BytesIO(image_bytes))
@@ -69,8 +97,23 @@ Return ONLY a valid JSON object, no markdown, no explanation:
   "quick_recommendation": "satu kalimat rekomendasi tindakan dalam Bahasa Indonesia",
   "storage_tips": "satu tips penyimpanan dalam Bahasa Indonesia"
 }}"""
-        response = vision_model.generate_content([prompt, image])
-        text = response.text.strip()
+
+        # Try each model in priority order (2.0-flash first for higher quota)
+        last_error = None
+        for model_name in VISION_MODELS:
+            try:
+                print(f"🔍 Gemini Vision: trying {model_name}...")
+                text = _call_gemini_with_retry(model_name, [prompt, image])
+                print(f"✅ Gemini Vision succeeded with {model_name}")
+                break
+            except Exception as e:
+                last_error = e
+                print(f"⚠️ Gemini Vision failed with {model_name}: {e}")
+                continue
+        else:
+            # All models failed
+            raise last_error
+
         # Clean markdown if present
         if text.startswith("```"):
             text = text.split("```")[1]
@@ -98,4 +141,3 @@ Return ONLY a valid JSON object, no markdown, no explanation:
             "quick_recommendation": "Segera periksa kondisi buah secara manual",
             "storage_tips": "Simpan di tempat sejuk dan kering",
         }
-

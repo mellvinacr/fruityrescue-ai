@@ -35,11 +35,11 @@ app.include_router(recipients.router)
 
 # ── Gemini Chat Endpoint ──
 GEMINI_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
+CHAT_MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"]
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
-    chat_model = genai.GenerativeModel("gemini-2.5-flash")
 else:
-    chat_model = None
+    CHAT_MODELS = []  # No models available without key
 
 SYSTEM_PROMPT = (
     "Kamu adalah asisten FruityRescue AI yang ramah dan berpengetahuan. "
@@ -51,15 +51,25 @@ SYSTEM_PROMPT = (
 
 @app.post("/chat", response_model=schemas.ChatResponse)
 def chat_endpoint(body: schemas.ChatRequest):
-    if not chat_model:
+    if not CHAT_MODELS:
         return {"reply": "Maaf, layanan chat sedang tidak tersedia."}
     history_text = "\n".join(f"{m.role}: {m.content}" for m in body.history)
     full_prompt = f"{SYSTEM_PROMPT}\n\n{history_text}\nuser: {body.message}\nassistant:"
-    try:
-        response = chat_model.generate_content(full_prompt)
-        return {"reply": response.text.strip()}
-    except Exception as e:
-        return {"reply": f"Maaf, terjadi kesalahan: {str(e)}"}
+    
+    last_error = None
+    for model_name in CHAT_MODELS:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(full_prompt)
+            return {"reply": response.text.strip()}
+        except Exception as e:
+            last_error = e
+            error_str = str(e)
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
+                continue  # Try next model
+            return {"reply": f"Maaf, terjadi kesalahan: {str(e)}"}
+    
+    return {"reply": f"Maaf, semua model sedang penuh quota. Silakan coba lagi nanti."}
 
 
 @app.get("/health")
