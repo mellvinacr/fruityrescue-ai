@@ -87,6 +87,7 @@ jobs:
               -e R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }} \
               -e R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }} \
               -e R2_BUCKET_NAME=${{ secrets.R2_BUCKET_NAME }} \
+              -e R2_PUBLIC_URL=https://pub-94caa31fe2174098b460a30040079033.r2.dev \
               -e BACKEND_PUBLIC_URL=https://fruityrescue-ai.pages.dev/api \
               -e GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
               -e GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
