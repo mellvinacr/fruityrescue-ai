@@ -29,13 +29,26 @@ def load_model():
         print(f"❌ Failed to load fruit type model: {e}")
         print(f"   Traceback: {traceback.format_exc()}")
 
-    # 2. Model for Freshness (ViT) — REMOVED FOR 2GB RAM COMPATIBILITY
-    # We now rely entirely on Gemini Vision for freshness detection
-    # to save ~800MB of RAM.
+    # 2. Model for Freshness (ViT)
+    # We can load this now because we added a 1.8GB Swap file to the 2GB server!
+    try:
+        print("Loading freshness model: melispsp/fresh_rotten...")
+        freshness_classifier = pipeline(
+            "image-classification",
+            model="melispsp/fresh_rotten",
+            token=hf_token,
+            device=-1,
+        )
+        print("✅ Freshness model loaded successfully")
+    except Exception as e:
+        print(f"❌ Failed to load freshness model: {e}")
+        print(f"   Traceback: {traceback.format_exc()}")
     
     # Summary
-    if type_classifier is not None:
-        print("✅ Light model loaded — freshness will use Gemini fallback")
+    if type_classifier is not None and freshness_classifier is not None:
+        print("✅ Dual Hugging Face models loaded successfully!")
+    elif type_classifier is not None:
+        print("✅ Type model loaded — freshness will use Gemini fallback")
     else:
         print("🚨 CRITICAL: No models could be loaded! /detect will rely entirely on Gemini Vision.")
         _log_system_resources()
