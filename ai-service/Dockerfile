@@ -15,11 +15,9 @@ RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
 ENV HF_HOME=/app/hf_cache
 RUN python -c "\
 from transformers import pipeline; \
-print('Downloading type model...'); \
+print('Downloading type model (Lightweight ResNet-50)...'); \
 pipeline('image-classification', model='jazzmacedo/fruits-and-vegetables-detector-36'); \
-print('Downloading freshness model...'); \
-pipeline('image-classification', model='melispsp/fresh_rotten'); \
-print('Models cached successfully')"
+print('Model cached successfully. Freshness model removed for 2GB RAM compatibility.')"
 
 # Copy application code
 COPY . .

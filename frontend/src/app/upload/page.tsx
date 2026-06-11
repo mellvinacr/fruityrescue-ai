@@ -63,7 +63,18 @@ export default function UploadPage() {
   };
 
   const isFresh = result?.status === "fresh";
-  const progressPercent = result?.freshness_score || 0;
+  const isRotten = result?.status === "rotten";
+  const isPending = result?.status === "pending" || result?.status === "unknown";
+  const progressPercent = result?.freshness_score ?? 0;
+
+  // Sanitize AI reason — don't show raw technical errors to users
+  const displayReason = (reason: string | null | undefined) => {
+    if (!reason) return "Menunggu analisis AI";
+    if (reason.toLowerCase().includes("error") || reason.toLowerCase().includes("failed")) {
+      return "Layanan AI sedang tidak tersedia. Silakan coba lagi nanti.";
+    }
+    return reason;
+  };
 
   return (
     <AuthenticatedLayout>
@@ -152,39 +163,67 @@ export default function UploadPage() {
             <div>
               {/* Status header */}
               <div className="text-center mb-6">
-                <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-3 ${isFresh ? "bg-green-100" : "bg-orange-100"}`}>
-                  <span className="text-3xl">{isFresh ? "✅" : "⚠️"}</span>
+                <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-3 ${
+                  isFresh ? "bg-green-100" : isPending ? "bg-blue-100" : "bg-orange-100"
+                }`}>
+                  <span className="text-3xl">{isFresh ? "✅" : isPending ? "🔍" : "⚠️"}</span>
                 </div>
-                <span className={`inline-block text-xs font-semibold px-4 py-1.5 rounded-full ${isFresh ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-700"}`}>
-                  {isFresh ? "BUAH SEGAR TERDETEKSI" : "BUAH BUSUK TERDETEKSI"}
+                <span className={`inline-block text-xs font-semibold px-4 py-1.5 rounded-full ${
+                  isFresh
+                    ? "bg-green-100 text-green-800"
+                    : isPending
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-orange-100 text-orange-700"
+                }`}>
+                  {isFresh ? "BUAH SEGAR TERDETEKSI" : isPending ? "MENUNGGU ANALISIS" : "BUAH BUSUK TERDETEKSI"}
                 </span>
               </div>
 
-              {/* AI Analysis */}
-              <div className={`rounded-xl border p-5 mb-4 ${isFresh ? "bg-green-50 border-green-200" : "bg-orange-50 border-orange-200"}`}>
-                <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-                  <div><span className="text-gray-500">Nama Buah:</span> <span className="font-semibold">{result.fruit_name}</span></div>
-                  <div><span className="text-gray-500">Skor:</span> <span className="font-semibold">{result.freshness_score}/100</span></div>
+              {/* Pending notice */}
+              {isPending && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 mb-4">
+                  <p className="text-sm font-semibold text-blue-800 mb-1">⏳ Analisis AI Belum Tersedia</p>
+                  <p className="text-sm text-blue-700">
+                    Layanan AI sedang tidak dapat menganalisis gambar saat ini. Donasi Anda tetap tercatat dan akan dianalisis ulang oleh tim kami.
+                  </p>
+                  <p className="text-xs text-blue-500 mt-2">
+                    Kemungkinan penyebab: server AI sedang restart atau sedang mengalami beban tinggi.
+                  </p>
                 </div>
-                <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-3">
-                  <div className={`h-full rounded-full transition-all duration-1000 ${isFresh ? "bg-gradient-to-r from-green-400 to-green-600" : "bg-gradient-to-r from-red-400 to-orange-500"}`} style={{ width: `${progressPercent}%` }} />
+              )}
+
+              {/* AI Analysis — hide detailed analysis for pending */}
+              {!isPending && (
+                <div className={`rounded-xl border p-5 mb-4 ${isFresh ? "bg-green-50 border-green-200" : "bg-orange-50 border-orange-200"}`}>
+                  <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+                    <div><span className="text-gray-500">Nama Buah:</span> <span className="font-semibold">{result.fruit_name || "Tidak terdeteksi"}</span></div>
+                    <div><span className="text-gray-500">Skor:</span> <span className="font-semibold">{result.freshness_score != null ? `${result.freshness_score}/100` : "-"}</span></div>
+                  </div>
+                  <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden mb-3">
+                    <div className={`h-full rounded-full transition-all duration-1000 ${isFresh ? "bg-gradient-to-r from-green-400 to-green-600" : "bg-gradient-to-r from-red-400 to-orange-500"}`} style={{ width: `${progressPercent}%` }} />
+                  </div>
+                  <p className="text-sm"><span className="text-gray-500">Kondisi:</span> {result.visual_condition || "Tidak tersedia"}</p>
+                  <p className="text-sm"><span className="text-gray-500">Estimasi sisa:</span> {result.estimated_days != null ? `${result.estimated_days} hari` : "Tidak tersedia"}</p>
+                  <p className="text-sm font-medium mt-2">{result.quick_recommendation}</p>
+                  {result.storage_tips && result.storage_tips !== "-" && <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-800">💡 {result.storage_tips}</div>}
                 </div>
-                <p className="text-sm"><span className="text-gray-500">Kondisi:</span> {result.visual_condition}</p>
-                <p className="text-sm"><span className="text-gray-500">Estimasi sisa:</span> {result.estimated_days || 0} hari</p>
-                <p className="text-sm font-medium mt-2">{result.quick_recommendation}</p>
-                {result.storage_tips && <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-800">💡 {result.storage_tips}</div>}
-              </div>
+              )}
 
               {/* Allocation */}
               <div className="rounded-xl border bg-white p-5 mb-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xl">{isFresh ? "🏠" : "🔄"}</span>
-                  <span className="font-bold text-gray-900">{isFresh ? "Dialokasikan ke Panti Asuhan" : "Rekomendasi Daur Ulang"}</span>
+                  <span className="text-xl">{isFresh ? "🏠" : isPending ? "⏳" : "🔄"}</span>
+                  <span className="font-bold text-gray-900">
+                    {isFresh ? "Dialokasikan ke Panti Asuhan" : isPending ? "Menunggu Alokasi" : "Rekomendasi Daur Ulang"}
+                  </span>
                 </div>
-                {!isFresh && (
+                {isPending && (
+                  <p className="text-sm text-gray-500">Alokasi akan ditentukan setelah analisis AI selesai.</p>
+                )}
+                {isRotten && (
                   <>
                     <p className="text-lg font-bold text-orange-700 mb-1">{result.ai_recommendation === "livestock" ? "Pakan Ternak" : "Pupuk Kompos"}</p>
-                    <p className="text-sm text-gray-600">{result.ai_reason}</p>
+                    <p className="text-sm text-gray-600">{displayReason(result.ai_reason)}</p>
                   </>
                 )}
                 {result.allocations?.[0]?.recipient && (

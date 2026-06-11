@@ -52,8 +52,14 @@ async def upload_fruit(
     # Call AI service
     ai_result = await detect_fruit(file_bytes, file.filename)
 
-    status_str = ai_result.get("status", "ROTTEN").upper()
-    fruit.status = "fresh" if status_str == "FRESH" else "rotten"
+    status_str = ai_result.get("status", "UNKNOWN").upper()
+    if status_str == "FRESH":
+        fruit.status = "fresh"
+    elif status_str == "ROTTEN":
+        fruit.status = "rotten"
+    else:
+        fruit.status = "pending"  # UNKNOWN or any other → don't assume rotten
+
     fruit.ai_confidence = ai_result.get("confidence")
     fruit.fruit_name = ai_result.get("fruit_name") or ai_result.get("fruit_type")
     fruit.freshness_score = ai_result.get("freshness_score")
@@ -62,11 +68,22 @@ async def upload_fruit(
     fruit.quick_recommendation = ai_result.get("quick_recommendation")
     fruit.storage_tips = ai_result.get("storage_tips")
     fruit.ai_recommendation = ai_result.get("recommendation")
-    fruit.ai_reason = ai_result.get("reason")
+    # Sanitize AI reason — don't expose raw error messages to users
+    raw_reason = ai_result.get("reason", "")
+    if raw_reason and "error" not in raw_reason.lower():
+        fruit.ai_reason = raw_reason
+    else:
+        fruit.ai_reason = ai_result.get("reason", "Menunggu analisis AI")
     db.commit()
 
     # Find matching recipient and create allocation
-    alloc_type = "orphanage" if fruit.status == "fresh" else (fruit.ai_recommendation or "compost")
+    if fruit.status == "fresh":
+        alloc_type = "orphanage"
+    elif fruit.status == "rotten":
+        alloc_type = fruit.ai_recommendation or "compost"
+    else:
+        alloc_type = "pending"  # Don't auto-allocate unknown fruit
+
     recipient = (
         db.query(models.Recipient)
         .filter(models.Recipient.type == alloc_type, models.Recipient.active == True)
@@ -76,7 +93,7 @@ async def upload_fruit(
         fruit_id=fruit.id,
         recipient_id=recipient.id if recipient else None,
         allocation_type=alloc_type,
-        notes=f"Auto-allocated: {fruit.ai_reason or 'N/A'}",
+        notes=f"Auto-allocated: {fruit.ai_reason or 'Menunggu analisis'}",
     )
     db.add(allocation)
     db.commit()

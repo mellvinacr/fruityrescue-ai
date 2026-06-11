@@ -65,10 +65,14 @@ app.include_router(recipients.router)
 # ── Gemini Chat Endpoint ──
 GEMINI_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
 CHAT_MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"]
+
+_gemini_configured = False
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
+    _gemini_configured = True
 else:
     CHAT_MODELS = []  # No models available without key
+    print("⚠️ WARNING: GEMINI_API_KEY not set — chatbot will be disabled")
 
 SYSTEM_PROMPT = (
     "Kamu adalah asisten FruityRescue AI yang ramah dan berpengetahuan. "
@@ -81,7 +85,8 @@ SYSTEM_PROMPT = (
 @app.post("/chat", response_model=schemas.ChatResponse)
 def chat_endpoint(body: schemas.ChatRequest):
     if not CHAT_MODELS:
-        return {"reply": "Maaf, layanan chat sedang tidak tersedia."}
+        return {"reply": "Maaf, layanan chat sedang tidak tersedia. Silakan hubungi admin untuk mengaktifkan Gemini API key."}
+    
     history_text = "\n".join(f"{m.role}: {m.content}" for m in body.history)
     full_prompt = f"{SYSTEM_PROMPT}\n\n{history_text}\nuser: {body.message}\nassistant:"
     
@@ -96,11 +101,21 @@ def chat_endpoint(body: schemas.ChatRequest):
             error_str = str(e)
             if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
                 continue  # Try next model
-            return {"reply": f"Maaf, terjadi kesalahan: {str(e)}"}
+            if "API_KEY_INVALID" in error_str or "PERMISSION_DENIED" in error_str:
+                print(f"🚨 Gemini API key rejected: {error_str}")
+                return {"reply": "Maaf, layanan chat sedang mengalami masalah konfigurasi. Silakan hubungi admin."}
+            print(f"⚠️ Chat error with {model_name}: {error_str}")
+            return {"reply": "Maaf, terjadi kesalahan pada layanan chat. Silakan coba lagi nanti."}
     
-    return {"reply": f"Maaf, semua model sedang penuh quota. Silakan coba lagi nanti."}
+    return {"reply": "Maaf, semua model sedang penuh kuota. Silakan coba lagi dalam beberapa menit."}
 
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "backend"}
+    return {
+        "status": "ok",
+        "service": "backend",
+        "gemini_configured": _gemini_configured,
+        "gemini_key_prefix": GEMINI_KEY[:6] + "..." if GEMINI_KEY else "NOT_SET",
+    }
+
