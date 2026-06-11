@@ -13,7 +13,17 @@ os.makedirs("static/uploads", exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
 
+from fastapi.responses import JSONResponse
+import traceback
+
 app = FastAPI(title="FruityRescue AI Backend API")
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "traceback": traceback.format_exc(), "error_str": str(exc)}
+    )
 
 @app.on_event("startup")
 def seed_admin_user():
