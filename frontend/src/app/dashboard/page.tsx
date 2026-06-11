@@ -137,7 +137,7 @@ export default function DashboardPage() {
                 fruits.slice(0, 3).map((f) => (
                   <div key={f.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-xl transition-colors">
                     {f.photo_url ? (
-                      <img src={f.photo_url} className="w-10 h-10 rounded-lg object-cover" alt="" />
+                      <img src={encodeURI(f.photo_url)} className="w-10 h-10 rounded-lg object-cover" alt="" />
                     ) : (
                       <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-lg">
                         🍎

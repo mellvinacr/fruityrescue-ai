@@ -95,7 +95,7 @@ export default function ProfilePage() {
               <thead><tr className="bg-gray-50 text-gray-500"><th className="p-3 text-left">Foto</th><th className="p-3 text-left">Buah</th><th className="p-3 text-left">Berat</th><th className="p-3 text-left">Status</th><th className="p-3 text-left">Alokasi</th><th className="p-3 text-left">Tanggal</th></tr></thead>
               <tbody>{fruits.map(f => (
                 <tr key={f.id} className="border-t hover:bg-gray-50">
-                  <td className="p-3">{f.photo_url ? <img src={f.photo_url} className="w-12 h-12 rounded-lg object-cover" alt="" /> : <div className="w-12 h-12 bg-gray-100 rounded-lg" />}</td>
+                  <td className="p-3">{f.photo_url ? <img src={encodeURI(f.photo_url)} className="w-12 h-12 rounded-lg object-cover" alt="" /> : <div className="w-12 h-12 bg-gray-100 rounded-lg" />}</td>
                   <td className="p-3 font-medium">{f.fruit_name || "-"}</td>
                   <td className="p-3">{f.quantity_kg} kg</td>
                   <td className="p-3">
